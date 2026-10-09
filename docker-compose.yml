@@ -15,5 +15,48 @@ services:
       interval: 3s
       timeout: 5s
       retries: 20
+
+  seed:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./package-seed.json:/app/package.json:ro
+    environment:
+      DATABASE_URL: postgresql://splitlock:splitlock@db:5432/splitlock
+      SEED_RUNS: "60000"
+      SEED_RUNNERS: "3500"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm install --omit=dev && node scripts/seed.mjs"
+    restart: "no"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://splitlock:splitlock@db:5432/splitlock
+      PORT: "4000"
+    ports:
+      - "4000:4000"
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_PROXY: http://backend:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
